@@ -1,3 +1,7 @@
+
+use astm_comms::astm;
+
 fn main() {
-    println!("Hello, world!");
+    astm::finder::list_ports();
 }
+
