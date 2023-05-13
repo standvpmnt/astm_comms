@@ -1,7 +1,6 @@
-
 use astm_comms::astm;
 
-fn main() {
-    astm::finder::list_ports();
+#[tokio::main]
+async fn main() {
+    astm::finder::list_ports().await;
 }
-
