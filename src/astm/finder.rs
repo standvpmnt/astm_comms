@@ -19,7 +19,7 @@ enum BaudRates {
 
 // get all ports
 pub async fn is_astm_compliant(inp: serialport::SerialPortInfo) -> bool {
-    let handle = serialport::new(inp.port_name, 9600)
+    let handle = serialport::new(inp.port_name,115200)
         .timeout(Duration::from_secs(30))
         .data_bits(serialport::DataBits::Eight)
         .flow_control(serialport::FlowControl::Software)
@@ -68,45 +68,71 @@ async fn check_astm_implementation(mut inp: Box<dyn serialport::SerialPort>) -> 
 // instead of this check if serial port is ready to send data
 pub async fn read_and_print_data(mut handle: Box<dyn serialport::SerialPort>) {
     let h = tokio::task::spawn(async move {
-        let mut input_buf = [0; 1000];
+        let mut input_buf = [0; 64000];
         // let mut line: Vec<u8> = Vec::with_capacity(1000);
-        let mut interim_buffer = Vec::with_capacity(1000);
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        // let mut interim_buffer = Vec::with_capacity(64000);
+        tokio::time::sleep(Duration::from_millis(100)).await;
         loop {
-                match handle.read(& mut input_buf[..]) {
-                    Ok(size) => {if size > 0 {
-                        let data_received = &input_buf[0..size];
-                        if let Some(x) = data_received.last() {
-                            match x {
-                                &5 => {handle.write(&ACK).expect("Failed to send ack for enquiry");},
-                                &10 => {
-                                    for item in data_received.clone() {
-                                        interim_buffer.push(item.clone());
-                                    }
-                                    println!("line created so far is {:?}", String::from_utf8_lossy(&interim_buffer[..]));
-                                    handle.write(&ACK).expect("Failed to send ack after receiving data");
-                                },
-                                _ => {
-                                    // println!("data received is:");
-                                    println!("last character received is {:#?}", x);
-                                    // println!("{:#?}", data_received);
-                                    let data = data_received.clone();
-                                    for item in data {
-                                        interim_buffer.push(item.clone());
-                                    }
-                                    // handle.write(&NAK).expect("Failed to receive complete data requesting data");
-                                }
-                            }
-                            // println!("Data received is {:?}, adding only 0th: {}", data_received, data_received[0]);
-                            // line.push(data_received[0].clone());
-                        }
-                    }},
-                    Err(e) => {
-                        eprintln!("{}",e);
+            let some = handle.bytes_to_read().expect("failed to get bytes number to be read");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let some2 = handle.bytes_to_read().expect("failed to get bytes number to be read");
+            if some2 == 0 {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            } else if some2 == some {
+                println!("Ready to read {some} bytes of data");
+                let data = handle.read(& mut input_buf[..]);
+                match data {
+                    Err(k) => {
+                        eprintln!("error in reading data {:#?}", k);
+                        continue;
+                    },
+                    Ok(k) => {
+                        println!("Read data is {:#?}", String::from_utf8_lossy(&input_buf[0..k]));
                     }
                 }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+                handle.write(&ACK).expect("failed to send ack");
+            } else if some2 > some {
+                tokio::time::sleep(Duration::from_millis(200)).await;
             }
+        }
+        // loop {
+            //     match handle.read(& mut input_buf[..]) {
+            //         Ok(size) => {if size > 0 {
+            //             let data_received = &input_buf[0..size];
+            //             if let Some(x) = data_received.last() {
+            //                 match x {
+            //                     &5 => {handle.write(&ACK).expect("Failed to send ack for enquiry");},
+            //                     &10 => {
+            //                         for item in data_received.clone() {
+            //                             interim_buffer.push(item.clone());
+            //                         }
+            //                         println!("line created so far is {:?}", String::from_utf8_lossy(&interim_buffer[..]));
+            //                         handle.write(&ACK).expect("Failed to send ack after receiving data");
+            //                     },
+            //                     // &3 => {
+            //                     //     // end of text transmission message
+            //                     // }
+            //                     _ => {
+            //                         // println!("data received is:");
+            //                         println!("last character received is {:#?}", x);
+            //                         // println!("{:#?}", data_received);
+            //                         let data = data_received.clone();
+            //                         for item in data {
+            //                             interim_buffer.push(item.clone());
+            //                         }
+            //                         // handle.write(&NAK).expect("Failed to receive complete data requesting data");
+            //                     }
+            //                 }
+            //                 // println!("Data received is {:?}, adding only 0th: {}", data_received, data_received[0]);
+            //                 // line.push(data_received[0].clone());
+            //             }
+            //         }},
+            //         Err(e) => {
+            //             eprintln!("{}",e);
+            //         }
+            //     }
+            // tokio::time::sleep(Duration::from_millis(50)).await;
+            // }
     });
     h.await;
 }
