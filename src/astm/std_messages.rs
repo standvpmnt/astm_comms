@@ -106,7 +106,7 @@ mod tests {
         let input = "1H|\\^&|||c111^Roche^c111^4.2.2.1730^1^13085|||||host|PCUPL^BATCH|P|1|20230515160340\r";
         let input1 = "2M|1|CR^BM^c111^1|712^BILT3|57884601|umol/L|BS^BILT3|712^SR^12547\\712^R1^1209|N^R|2|20230428183346|A^$SYS$||1.349997E-03^2.383310E-04|SD^^^59514300|70.7^0.0182^0.0186^0.0178^0^0\\0^0.00135^0.0016^0.0011^0^0\r";
         let input2 = "3L|1|N\r";
-        
+
         assert_eq!(Record::parse(input.to_owned()).unwrap().frame_number(), 1);
         assert_eq!(Record::parse(input1.to_owned()).unwrap().frame_number(), 2);
         assert_eq!(Record::parse(input2.to_owned()).unwrap().frame_number(), 3);
