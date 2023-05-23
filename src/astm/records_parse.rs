@@ -232,7 +232,8 @@ impl TestOrder {
     // specimen_received_at sample receieved in lab at this time fifteenth field
 
     // specimen_descriptor this has 2 parts separated by component delimiter
-    //     specimen_type eg. blood, urine, serum, hair, wound, biopsy, sputum etc.
+    //     specimen_type eg. blood, urine, serum, hair, wound, biopsy, sputum etc. this is not
+    //     available in c111
     //     specimen_source this is specimen source body type
 
     // ordering_physician name of ordering physician seventeenth field

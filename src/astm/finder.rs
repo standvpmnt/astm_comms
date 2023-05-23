@@ -17,12 +17,12 @@ enum BaudRates {
 
 // get all ports
 pub async fn is_astm_compliant(inp: tokio_serial::SerialPortInfo) -> bool {
-    let handle = tokio_serial::new(inp.port_name,115200)
+    let handle = tokio_serial::new(inp.port_name, 115200)
         .timeout(Duration::from_secs(30))
-        .data_bits( tokio_serial::DataBits::Eight)
-        .flow_control( tokio_serial::FlowControl::Software)
-        .parity( tokio_serial::Parity::None)
-        .stop_bits( tokio_serial::StopBits::One)
+        .data_bits(tokio_serial::DataBits::Eight)
+        .flow_control(tokio_serial::FlowControl::Software)
+        .parity(tokio_serial::Parity::None)
+        .stop_bits(tokio_serial::StopBits::One)
         .open()
         .expect("failed to open port");
     // check_astm_implementation(handle).await;
@@ -71,21 +71,28 @@ pub async fn read_and_print_data(mut handle: Box<dyn tokio_serial::SerialPort>) 
         // let mut interim_buffer = Vec::with_capacity(64000);
         tokio::time::sleep(Duration::from_millis(100)).await;
         loop {
-            let some = handle.bytes_to_read().expect("failed to get bytes number to be read");
+            let some = handle
+                .bytes_to_read()
+                .expect("failed to get bytes number to be read");
             tokio::time::sleep(Duration::from_millis(10)).await;
-            let some2 = handle.bytes_to_read().expect("failed to get bytes number to be read");
+            let some2 = handle
+                .bytes_to_read()
+                .expect("failed to get bytes number to be read");
             if some2 == 0 {
                 tokio::time::sleep(Duration::from_secs(1)).await;
             } else if some2 == some {
                 println!("Ready to read {some} bytes of data");
-                let data = handle.read(& mut input_buf[..]);
+                let data = handle.read(&mut input_buf[..]);
                 match data {
                     Err(k) => {
                         eprintln!("error in reading data {:#?}", k);
                         continue;
-                    },
+                    }
                     Ok(k) => {
-                        println!("Read data is {:#?}", String::from_utf8_lossy(&input_buf[0..k]));
+                        println!(
+                            "Read data is {:#?}",
+                            String::from_utf8_lossy(&input_buf[0..k])
+                        );
                     }
                 }
                 handle.write(&ACK).expect("failed to send ack");

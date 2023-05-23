@@ -8,14 +8,14 @@ pub const NAK: [u8; 1] = [b'\x15'];
 #[derive(Debug, PartialEq)]
 enum Record {
     // indicators are case insensitive
-    Header(String), //H
-    Patient(String), //P
-    TestOrder(String), //O
-    Result(String), //R
-    Comment(String), //C
-    RequestInformation(String), //Q
-    Scientific(String), //S
-    MessageTerminator(String), // L
+    Header(String),                  //H
+    Patient(String),                 //P
+    TestOrder(String),               //O
+    Result(String),                  //R
+    Comment(String),                 //C
+    RequestInformation(String),      //Q
+    Scientific(String),              //S
+    MessageTerminator(String),       // L
     ManufacturerInformation(String), //M
 }
 
@@ -31,23 +31,27 @@ impl Record {
     pub fn parse(s: String) -> Result<Record, RecordError> {
         let record_identifier = s.chars().nth(1);
         match record_identifier {
-            None => Err(RecordError::InvalidInput(format!("invalid input received\n {}", s))),
-            Some(k) => {
-                match k.to_ascii_lowercase() {
-                    'h' => Ok(Record::Header(s)),
-                    'p' => Ok(Record::Patient(s)),
-                    'o' => Ok(Record::TestOrder(s)),
-                    'r' => Ok(Record::Result(s)),
-                    'c' => Ok(Record::Comment(s)),
-                    'q' => Ok(Record::RequestInformation(s)),
-                    's' => Ok(Record::Scientific(s)),
-                    'l' => Ok(Record::MessageTerminator(s)),
-                    'm' => Ok(Record::ManufacturerInformation(s)),
-                    _ => {
-                        return Err(RecordError::InvalidInput(format!("record identifier missing from data received \n {}", s)));
-                    }
+            None => Err(RecordError::InvalidInput(format!(
+                "invalid input received\n {}",
+                s
+            ))),
+            Some(k) => match k.to_ascii_lowercase() {
+                'h' => Ok(Record::Header(s)),
+                'p' => Ok(Record::Patient(s)),
+                'o' => Ok(Record::TestOrder(s)),
+                'r' => Ok(Record::Result(s)),
+                'c' => Ok(Record::Comment(s)),
+                'q' => Ok(Record::RequestInformation(s)),
+                's' => Ok(Record::Scientific(s)),
+                'l' => Ok(Record::MessageTerminator(s)),
+                'm' => Ok(Record::ManufacturerInformation(s)),
+                _ => {
+                    return Err(RecordError::InvalidInput(format!(
+                        "record identifier missing from data received \n {}",
+                        s
+                    )));
                 }
-            }
+            },
         }
     }
 
@@ -68,7 +72,12 @@ impl Record {
     fn frame_number(&self) -> u32 {
         let radix = 10;
         // Can this be a malformed frame number?
-        self.inner().chars().nth(0).unwrap().to_digit(radix).unwrap()
+        self.inner()
+            .chars()
+            .nth(0)
+            .unwrap()
+            .to_digit(radix)
+            .unwrap()
     }
 }
 
@@ -86,7 +95,7 @@ mod tests {
             _ => {
                 println!("Failed to parse input \n {input}");
                 assert_err!(Ok(5));
-            },
+            }
         }
     }
 
