@@ -33,7 +33,7 @@ pub async fn is_astm_compliant(inp: tokio_serial::SerialPortInfo) -> bool {
 async fn check_astm_implementation(mut inp: Box<dyn tokio_serial::SerialPort>) -> bool {
     let mut serial_buf = [0];
     let mut cloned_handle = inp.try_clone().expect("Failed to clone handle");
-    let read_hd = tokio::task::spawn(async move {
+    let read_handle = tokio::task::spawn(async move {
         loop {
             match inp.read(serial_buf.as_mut_slice()) {
                 Ok(size) => {
@@ -55,7 +55,7 @@ async fn check_astm_implementation(mut inp: Box<dyn tokio_serial::SerialPort>) -
 
     let temp = cloned_handle.write(&ENQ).expect("Failed to send data");
     println!("Sent {} bytes succesfully", temp);
-    read_hd.await.unwrap();
+    read_handle.await.unwrap();
     return true;
 }
 
@@ -74,12 +74,12 @@ pub async fn read_and_print_data(mut handle: Box<dyn tokio_serial::SerialPort>) 
             let some = handle
                 .bytes_to_read()
                 .expect("failed to get bytes number to be read");
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
             let some2 = handle
                 .bytes_to_read()
                 .expect("failed to get bytes number to be read");
             if some2 == 0 {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
             } else if some2 == some {
                 println!("Ready to read {some} bytes of data");
                 let data = handle.read(&mut input_buf[..]);
@@ -101,5 +101,9 @@ pub async fn read_and_print_data(mut handle: Box<dyn tokio_serial::SerialPort>) 
             }
         }
     });
-    h.await;
+    let data = h.await;
+    match data {
+        Err(k) => eprintln!("error in reading data {:#?}", k),
+        Ok(k) => println!("returned data is {:#?}", k),
+    };
 }
