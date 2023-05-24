@@ -1,45 +1,54 @@
 // this module will ensure serialports connected are available for communication
+use anyhow::Context;
 use tokio::time::Duration;
+use tokio_serial::{available_ports, SerialPort, SerialPortInfo};
+
+use std::collections::HashMap;
 
 use super::std_messages::{ACK, ENQ, EOT, NAK};
-
-pub async fn list_ports() {
-    let res = tokio_serial::available_ports().unwrap();
-    for port in res {
-        is_astm_compliant(port).await;
-    }
-}
 
 enum BaudRates {
     ElevenK,
     NineK,
 }
 
-// get all ports
-pub async fn is_astm_compliant(inp: tokio_serial::SerialPortInfo) -> bool {
-    let handle = tokio_serial::new(inp.port_name, 115200)
+pub async fn all_machines() -> HashMap<String, Box<dyn SerialPort>> {
+    let potential_ports = available_ports().unwrap();
+    let mut machine_handles: HashMap<String, Box<dyn SerialPort>> = HashMap::new();
+    for port in potential_ports {
+        match serial_handle(&port) {
+            Ok(handle) => {
+                if is_astm_compliant(handle.try_clone().expect("Failed to clone device handle")).await {
+                    machine_handles.insert(handle.name().unwrap(), handle);
+                }
+            },
+            Err(e) => {eprintln!("Error encountered when opening port {:?}, \n {:#?}", port.port_name, e)}
+        }
+    }
+    machine_handles
+}
+
+// this assumes certain default values, these need to be configurable though
+// TODO! implement these with configuration files or env variables instead
+fn serial_handle(port_info: &SerialPortInfo) -> Result<Box<dyn SerialPort>, anyhow::Error> {
+    Ok(tokio_serial::new(port_info.port_name, 115200)
         .timeout(Duration::from_secs(30))
         .data_bits(tokio_serial::DataBits::Eight)
         .flow_control(tokio_serial::FlowControl::Software)
         .parity(tokio_serial::Parity::None)
         .stop_bits(tokio_serial::StopBits::One)
         .open()
-        .expect("failed to open port");
-    // check_astm_implementation(handle).await;
-    read_and_print_data(handle).await;
-    return true;
+        .context("failed to open port")?)
 }
 
-async fn check_astm_implementation(mut inp: Box<dyn tokio_serial::SerialPort>) -> bool {
-    let mut serial_buf = [0];
-    let mut cloned_handle = inp.try_clone().expect("Failed to clone handle");
+pub async fn is_astm_compliant(mut handle: Box<dyn SerialPort>) -> bool {
+    let mut serial_buf = [0u8; 2];
+    let mut cloned_handle = handle.try_clone().expect("Failed to clone handle");
     let read_handle = tokio::task::spawn(async move {
         loop {
-            match inp.read(serial_buf.as_mut_slice()) {
+            match handle.read(serial_buf.as_mut_slice()) {
                 Ok(size) => {
                     if size > 0 {
-                        println!("data received is {} long", size);
-                        println!("data received is {:#?}", serial_buf);
                         let data_received = String::from_utf8_lossy(&serial_buf);
                         println!("Data received is {}", data_received);
                         break;
@@ -58,6 +67,8 @@ async fn check_astm_implementation(mut inp: Box<dyn tokio_serial::SerialPort>) -
     read_handle.await.unwrap();
     return true;
 }
+
+// async fn check_astm_implementation(mut port_handle: Box<dyn SerialPort>) -> bool {}
 
 // create a channel that can communicate and inform if a new port is available
 // if a new port is available we will safely pause current comms and then give

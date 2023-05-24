@@ -29,3 +29,21 @@
     // is reset to 1 for each new patient information record above, it is numbered
     // 1, 2, etc for each occurence of this record
     // 3rd field
+
+
+// messages to be received by host from analyzer
+// test_order_inquiry  -> TSREQ^REAL
+// patient_control_sample_order_list ->
+// patient_control_sample_analytical_data ->
+// photometric_raw_data ->
+// photometric_calibration_data ->
+// ISE_calibration_data ->
+// reagent_disk_loading ->
+// database_factory_reset_response ->
+
+// messages to be sent by host to analyzer
+// analytical_data_transmission_request_sample
+// analytical_data_transmission_request_cal
+// test_orders
+// reagent_tray_loading_inquiry
+// database_factory_reset_request -> manufacturer use only
