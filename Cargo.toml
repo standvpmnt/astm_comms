@@ -19,6 +19,7 @@ chrono = { version = "0.4.24", features = ["serde"] }
 claims = "0.7.1"
 hex = "0.4.3"
 serde = "1.0.162"
+serialport = "4.2.1"
 thiserror = "1.0.40"
 tokio = { version = "1.28.0", features = ["full"] }
 tokio-serial = "5.4.4"

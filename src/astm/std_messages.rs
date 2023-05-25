@@ -1,4 +1,6 @@
 use anyhow::Context;
+use bytes::Bytes;
+use super::records_parser;
 
 pub const SOH: [u8; 1] = [1];
 pub const STX: [u8; 1] = [2];
@@ -17,15 +19,15 @@ pub const LF: [u8; 1] = [b'\x0A'];
 #[derive(Debug, PartialEq)]
 pub enum Record {
     // indicators are case insensitive
-    Header(String),                  //H
-    Patient(String),                 //P
-    TestOrder(String),               //O
-    Result(String),                  //R
-    Comment(String),                 //C
-    RequestInformation(String),      //Q
-    Scientific(String),              //S
-    MessageTerminator(String),       // L
-    ManufacturerInformation(String), //M
+    Header(Bytes),                  //H
+    Patient(Bytes),                 //P
+    TestOrder(Bytes),               //O
+    Result(Bytes),                  //R
+    Comment(Bytes),                 //C
+    RequestInformation(Bytes),      //Q
+    Scientific(Bytes),              //S
+    MessageTerminator(Bytes),       // L
+    ManufacturerInformation(Bytes), //M
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -38,73 +40,30 @@ pub enum RecordError {
 
 impl Record {
     pub fn parse_from_buf(buf_slice: &[u8]) -> Result<Record, RecordError> {
-        match buf_slice[1] {
-            b'h' | b'H' => Ok(Record::Header("hello".to_string())),
-            b'p' | b'P' => Ok(Record::Patient("hello".to_string())),
-            b'o' | b'O' => Ok(Record::TestOrder("hello".to_string())),
-            b'r' | b'R' => Ok(Record::Result("hello".to_string())),
-            b'c' | b'C' => Ok(Record::Comment("hello".to_string())),
-            b'q' | b'Q' => Ok(Record::RequestInformation("hello".to_string())),
-            b's' | b'S' => Ok(Record::Scientific("hello".to_string())),
-            b'l' | b'L' => Ok(Record::MessageTerminator("hello".to_string())),
-            b'm' | b'M' => Ok(Record::ManufacturerInformation("hello".to_string())),
+        println!("parsing buf slice: {:?}", buf_slice);
+        match buf_slice[2] {
+            b'h' | b'H' => Ok(Record::Header(Bytes::copy_from_slice(buf_slice))),
+            b'p' | b'P' => Ok(Record::Patient(Bytes::copy_from_slice(buf_slice))),
+            b'o' | b'O' => Ok(Record::TestOrder(Bytes::copy_from_slice(buf_slice))),
+            b'r' | b'R' => Ok(Record::Result(Bytes::copy_from_slice(buf_slice))),
+            b'c' | b'C' => Ok(Record::Comment(Bytes::copy_from_slice(buf_slice))),
+            b'q' | b'Q' => Ok(Record::RequestInformation(Bytes::copy_from_slice(buf_slice))),
+            b's' | b'S' => Ok(Record::Scientific(Bytes::copy_from_slice(buf_slice))),
+            b'l' | b'L' => Ok(Record::MessageTerminator(Bytes::copy_from_slice(buf_slice))),
+            b'm' | b'M' => Ok(Record::ManufacturerInformation(Bytes::copy_from_slice(buf_slice))),
             _ => Err(RecordError::MalformedRecord(format!(
-                "record has some other item in position"
+                "record has some other item,{}", buf_slice[2]
             ))),
         }
     }
 
-    pub fn parse(s: String) -> Result<Record, RecordError> {
-        let record_identifier = s.chars().nth(1);
-        match record_identifier {
-            None => Err(RecordError::InvalidInput(format!(
-                "invalid input received\n {}",
-                s
-            ))),
-            Some(k) => match k.to_ascii_lowercase() {
-                'h' => Ok(Record::Header(s)),
-                'p' => Ok(Record::Patient(s)),
-                'o' => Ok(Record::TestOrder(s)),
-                'r' => Ok(Record::Result(s)),
-                'c' => Ok(Record::Comment(s)),
-                'q' => Ok(Record::RequestInformation(s)),
-                's' => Ok(Record::Scientific(s)),
-                'l' => Ok(Record::MessageTerminator(s)),
-                'm' => Ok(Record::ManufacturerInformation(s)),
-                _ => {
-                    return Err(RecordError::InvalidInput(format!(
-                        "record identifier missing from data received \n {}",
-                        s
-                    )));
-                }
-            },
-        }
-    }
+    // pub fn header_record() -> super::records_parser::Header {
 
-    fn inner(&self) -> &str {
-        match &self {
-            Self::Header(k) => k.as_str(),
-            Self::Patient(k) => k.as_str(),
-            Self::TestOrder(k) => k.as_str(),
-            Self::Result(k) => k.as_str(),
-            Self::Comment(k) => k.as_str(),
-            Self::RequestInformation(k) => k.as_str(),
-            Self::Scientific(k) => k.as_str(),
-            Self::MessageTerminator(k) => k.as_str(),
-            Self::ManufacturerInformation(k) => k.as_str(),
-        }
-    }
+    // }
 
-    fn frame_number(&self) -> u32 {
-        let radix = 10;
-        // Can this be a malformed frame number?
-        self.inner()
-            .chars()
-            .nth(0)
-            .unwrap()
-            .to_digit(radix)
-            .unwrap()
-    }
+    // fn frame_number(&self) -> u32 {
+    //     self.inner()
+    // }
 }
 
 #[cfg(test)]

@@ -7,7 +7,14 @@ use tokio_serial::SerialPort;
 async fn main() {
     let machines: HashMap<String, Box<dyn SerialPort>> = HashMap::new();
     let machines = astm::communicator::all_machines(machines).await;
-    for machine in machines {
-        astm::communicator::process_incoming(machine.1).await;
+    if machines.len() < 1 {
+        eprintln!("No machines were found");
     }
+    let h = tokio::task::spawn(async move {
+        for machine in machines {
+            println!("starting communication with {}", machine.0);
+            astm::communicator::process_incoming(machine.1).await;
+        }
+    });
+    h.await.unwrap();
 }

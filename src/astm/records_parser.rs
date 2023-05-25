@@ -1,23 +1,36 @@
 use bytes::Bytes;
 
-struct Header {
-    raw_data: Bytes
-}
-
-pub struct Delimiters {
-    pub field_delimiter: char, //2nd item
-    pub repeat_delimiter: char, //3rd item
-    pub component_delimiter: char, //4th item
-    pub escapre_delimiter: char //5th item
+#[derive(Debug)]
+pub struct Header {
+    raw_data: Bytes,
+    pub field_delim: u8,
+    pub repeat_delim: u8,
+    pub component_delim: u8,
+    pub escape_delim: u8,
 }
 
 impl Header {
-    fn delimiters(&self) -> Delimiters {
-        todo!() //
+
+    pub fn new(bytes: Bytes) -> Header {
+        if bytes.len() < 6 {
+            panic!("unhandled case of short buffer for header {:?}", bytes);
+        }
+        Header {
+            field_delim: bytes.get(3).map(|x| x.clone()).unwrap_or(b'|'),
+            repeat_delim:  bytes.get(4).map(|x| x.clone()).unwrap_or(b'\\'),
+            component_delim: bytes.get(5).map(|x| x.clone()).unwrap_or(b'^'),
+            escape_delim: bytes.get(6).map(|x| x.clone()).unwrap_or(b'&'),
+            raw_data: bytes
+        }
     }
 
-    fn message_control_id(&self) -> Option<&str> {
-        todo!() // third field
+    pub fn message_control_id(&self) -> Option<&[u8]> {
+        println!();
+        println!();
+        println!();
+        println!("current state of struct is {:#?}", self);
+        self.raw_data.split(|x| x == &self.field_delim).nth(3)
+        // todo!() // third field
     }
 
     fn access_password(&self) -> Option<&str> {
@@ -424,9 +437,9 @@ impl MessageTerminator {
     // F - last request for information processed
 }
 
-struct Scientifc{} // S
+struct Scientific{} // S
 
-impl Scientific {
+impl  Scientific {
     // sequence_number 2nd field
 
     // analytical method 3rd field, text field conforms to Appendix I of Elevitch and Boroviczeny
