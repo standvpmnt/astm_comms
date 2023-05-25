@@ -3,14 +3,9 @@ use anyhow::Context;
 use tokio::{task, time::Duration};
 use tokio_serial::{available_ports, SerialPort, SerialPortInfo};
 
-use std::collections::HashMap;
+use std::{collections::HashMap, io::BufRead};
 
-use super::std_messages::{ACK, ENQ};
-
-// enum BaudRates {
-//     ElevenK,
-//     NineK,
-// }
+use super::std_messages::{Record, ACK, ENQ};
 
 pub async fn all_machines(
     mut machines: HashMap<String, Box<dyn SerialPort>>,
@@ -115,34 +110,14 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
     });
 }
 
-// instead of this check if serial port is ready to send data
-// pub async fn read_and_print_data(mut handle: Box<dyn tokio_serial::SerialPort>) {
-//     let h = task::spawn(async move {
-//         let mut input_buf = [0; 4000];
-//         // let mut line: Vec<u8> = Vec::with_capacity(1000);
-//         // let mut interim_buffer = Vec::with_capacity(64000);
-//         tokio::time::sleep(Duration::from_millis(100)).await;
-//         loop {
-//             let some = handle
-//                 .bytes_to_read()
-//                 .expect("failed to get bytes number to be read");
-//             tokio::time::sleep(Duration::from_millis(50)).await;
-//             let some2 = handle
-//                 .bytes_to_read()
-//                 .expect("failed to get bytes number to be read");
-//             if some2 == 0 {
-//                 tokio::time::sleep(Duration::from_secs(2)).await;
-//             } else if some2 == some {
-//                 println!("Ready to read {some} bytes of data");
-//                 let data = handle.read(&mut input_buf[..]);
-//             } else if some2 > some {
-//                 tokio::time::sleep(Duration::from_millis(200)).await;
-//             }
-//         }
-//     });
-//     let data = h.await;
-//     match data {
-//         Err(k) => eprintln!("error in reading data {:#?}", k),
-//         Ok(k) => println!("returned data is {:#?}", k),
-//     };
-// }
+// this is mut to ensure it is not changed underneath while processing
+pub fn split_to_records(buf: bytes::Bytes) -> Record {
+    // split buffer on <CR> and include it in previous record
+    for slice in buf.split_inclusive(|item| item == &b'\x0D') {
+        let rec = Record::parse_from_buf(slice);
+        dbg!(slice);
+        dbg!(rec);
+    }
+
+    Record::Header("hello".to_string())
+}

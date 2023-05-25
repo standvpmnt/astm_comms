@@ -1,13 +1,14 @@
+use bytes::Bytes;
 
 struct Header {
-    raw_string: &string,
+    raw_data: Bytes
 }
 
 pub struct Delimiters {
-    pub field_delimiter: &char, //2nd item
-    pub repeat_delimiter: &char, //3rd item
-    pub component_delimiter: &char, //4th item
-    pub escapre_delimiter: &char //5th item
+    pub field_delimiter: char, //2nd item
+    pub repeat_delimiter: char, //3rd item
+    pub component_delimiter: char, //4th item
+    pub escapre_delimiter: char //5th item
 }
 
 impl Header {

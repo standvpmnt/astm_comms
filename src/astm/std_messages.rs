@@ -15,7 +15,7 @@ pub const CR: [u8; 1] = [b'\x0D'];
 pub const LF: [u8; 1] = [b'\x0A'];
 
 #[derive(Debug, PartialEq)]
-enum Record {
+pub enum Record {
     // indicators are case insensitive
     Header(String),                  //H
     Patient(String),                 //P
@@ -37,6 +37,23 @@ pub enum RecordError {
 }
 
 impl Record {
+    pub fn parse_from_buf(buf_slice: &[u8]) -> Result<Record, RecordError> {
+        match buf_slice[1] {
+            b'h' | b'H' => Ok(Record::Header("hello".to_string())),
+            b'p' | b'P' => Ok(Record::Patient("hello".to_string())),
+            b'o' | b'O' => Ok(Record::TestOrder("hello".to_string())),
+            b'r' | b'R' => Ok(Record::Result("hello".to_string())),
+            b'c' | b'C' => Ok(Record::Comment("hello".to_string())),
+            b'q' | b'Q' => Ok(Record::RequestInformation("hello".to_string())),
+            b's' | b'S' => Ok(Record::Scientific("hello".to_string())),
+            b'l' | b'L' => Ok(Record::MessageTerminator("hello".to_string())),
+            b'm' | b'M' => Ok(Record::ManufacturerInformation("hello".to_string())),
+            _ => Err(RecordError::MalformedRecord(format!(
+                "record has some other item in position"
+            ))),
+        }
+    }
+
     pub fn parse(s: String) -> Result<Record, RecordError> {
         let record_identifier = s.chars().nth(1);
         match record_identifier {
