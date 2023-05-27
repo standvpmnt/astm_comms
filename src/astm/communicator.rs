@@ -5,8 +5,8 @@ use tokio_serial::{available_ports, SerialPort, SerialPortInfo};
 
 use std::collections::HashMap;
 
-use super::std_messages::{Record, ACK, ENQ, EOT};
-use super::records_parser;
+use crate::astm::records_parser::*;
+use crate::astm::std_messages::{ACK, ENQ, EOT, ETX};
 
 pub async fn all_machines(
     mut machines: HashMap<String, Box<dyn SerialPort>>,
@@ -79,7 +79,7 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
         let mut buf = [0u8; 600];
 
         tokio::time::sleep(Duration::from_millis(100)).await;
-
+        let mut message: Vec<Record> = vec!();
         loop {
             let ready_bytes = handle
                 .bytes_to_read()
@@ -95,14 +95,20 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             } else if ready_bytes_later == ready_bytes {
                 if ready_bytes_later > buf.len() as u32 {
-                // if ready_bytes_later > buf.capacity() as u32 {
-                    eprintln!("Unhandled scenario of buffer being undersized for \
+                    // if ready_bytes_later > buf.capacity() as u32 {
+                    eprintln!(
+                        "Unhandled scenario of buffer being undersized for \
                               data about to be transmitted, buffer length is {} \
-                              data size is {}", buf.len(), ready_bytes_later
-                              );
+                              data size is {}",
+                        buf.len(),
+                        ready_bytes_later
+                    );
                     // raise some slack notifications here
                 }
-                println!("reading {} bytes from equipment to buffer", ready_bytes_later);
+                println!(
+                    "reading {} bytes from equipment to buffer",
+                    ready_bytes_later
+                );
                 let data = handle.read(&mut buf[..]);
                 match data {
                     Err(k) => {
@@ -110,17 +116,32 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
                         continue;
                     }
                     Ok(k) => {
+                        // ensure this is called only when the buffer contains values that
+                        // are greater than 1
+                        // actually check for various values that can possibly be in this
+                        // eg. if single value of ENQ, etc., raise error in case the
+                        // response is unknown case
+                        if k > 1 {
+                            // parse input into a record
+                            // validate the record
+                                // if validation fails send NAK and let loop re-run, raise alerts
+                                // as well
+                            // if validation passes, push the record into a vector
+                            message.push(split_to_records(&buf[..k]));
+                        }
+                        if &buf[k-5] == &ETX[0] {
+                            handle_incoming_request(message);
+                            // handle message
+                            //
+                            // reset message
+                            // message.clear();
+                            break;
+                        }
                         println!("size of data received is {:?}", k);
                         // println!("received data in bytes is {:#?}", &buf[..k]);
                         println!("Read data is {:#?}", String::from_utf8_lossy(&buf[0..k]));
                         // check that the frame is an end-frame or mid-frame
                         handle.write(&ACK).expect("failed to send ack");
-                        // ensure this is called only when the buffer contains values that
-                        // are greater than 1
-                        if k > 1 {
-                            // push these records into a vector?
-                            split_to_records(&buf[..k]);
-                        }
                     }
                 }
             }
@@ -133,15 +154,78 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
 pub fn split_to_records(buf: &[u8]) -> Record {
     // split buffer on <CR> and include it in previous record
     // for slice in buf.split_inclusive(|item| item == &b'\x0D') {
-        let rec = Record::parse_from_buf(&buf[..]).unwrap();
-        let record = match rec {
-            Record::Header(data) => Some(records_parser::Header::new(data)),
-            _ => {None},
-        };
-        if let Some(r) = record {
-            dbg!(r.message_control_id());
-        }
+    let rec = Record::parse_from_buf(&buf[..]).unwrap();
+    let record = match rec {
+        Record::Header(_) => Some(Header::new(rec)),
+        _ => None,
+    };
+    if let Some(r) = record {
+        dbg!(r.message_control_id());
+    }
     // }
 
-    Record::Header(bytes::Bytes::copy_from_slice("hello".as_bytes()))
+    Record::parse_from_buf(&buf[..]).unwrap()
+}
+
+fn handle_incoming_request(message: Vec<Record>) {
+    // let h = tokio::spawn(async move{
+    let mut messages = message.into_iter();
+    let header = Header::new(messages.next().unwrap());
+    println!("{:?}", header.sent_at());
+    println!("{:#?}", header.special_instructions());
+    println!("{:#?}", header.receiver_id());
+    println!("{:#?}", std::str::from_utf8(header.sender_characteristics().unwrap()));
+    println!("{:#?}", header.version_number());
+    println!("{:#?}", header.processing_id());
+    // for record in message.into_iter() {
+    //     let header = Header::new(record);
+    //     dbg!(header);
+    // }
+    // });
+    // h.await.unwrap();
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use claims::*;
+
+    #[test]
+    fn sending_multiple_records_for_splitting() {
+        let head_record: &[u8] = &[
+            2, 49, 72, 124, 92, 94, 38, 124, 124, 124, 99, 49, 49, 49, 94, 82, 111, 99, 104, 101,
+            94, 99, 49, 49, 49, 94, 52, 46, 50, 46, 50, 46, 49, 55, 51, 48, 94, 49, 94, 49, 51, 48,
+            56, 53, 124, 124, 124, 124, 124, 104, 111, 115, 116, 124, 82, 83, 85, 80, 76, 94, 66,
+            65, 84, 67, 72, 124, 80, 124, 49, 124, 50, 48, 50, 51, 48, 53, 50, 53, 49, 54, 52, 57,
+            51, 51, 13, 23, 70, 68, 13, 10,
+        ];
+        let patient_record: &[u8] = &[2, 50, 80, 124, 49, 124, 124, 13, 23, 52, 66, 13, 10];
+        let order_record: &[u8] = &[
+            2, 51, 79, 124, 49, 124, 80, 67, 67, 67, 49, 94, 53, 50, 53, 48, 50, 55, 48, 48, 94,
+            50, 48, 50, 51, 49, 50, 51, 49, 124, 49, 51, 57, 49, 124, 94, 94, 94, 55, 49, 50, 124,
+            124, 124, 124, 124, 124, 124, 81, 124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 50, 48, 50, 51, 48, 53, 50, 53, 49, 54, 52, 57, 51, 51, 124, 124, 124, 70, 13, 23,
+            48, 50, 13, 10,
+        ];
+        let result_record: &[u8] = &[
+            2, 52, 82, 124, 49, 124, 94, 94, 94, 55, 49, 50, 124, 48, 46, 57, 124, 109, 103, 47,
+            100, 76, 124, 49, 46, 48, 92, 48, 46, 57, 92, 49, 46, 48, 124, 78, 124, 124, 82, 124,
+            124, 36, 83, 89, 83, 36, 124, 124, 50, 48, 50, 51, 48, 52, 50, 56, 49, 56, 52, 49, 49, 54, 13, 23, 67, 55, 13, 10, ];
+        let comment_record: &[u8] = &[
+            2, 53, 67, 124, 49, 124, 73, 124, 124, 73, 13, 23, 52, 70, 13, 10,
+        ];
+        let termination_record: &[u8] = &[2, 54, 76, 124, 49, 124, 78, 13, 3, 48, 57, 13, 10];
+
+        let message = vec!(
+            Record::parse_from_buf(head_record).expect("failed to parse buffer"),
+            Record::parse_from_buf(patient_record).expect("failed to parse buffer"),
+            Record::parse_from_buf(order_record).expect("failed to parse buffer"),
+            Record::parse_from_buf(result_record).expect("failed to parse buffer"),
+            Record::parse_from_buf(comment_record).expect("failed to parse buffer"),
+            Record::parse_from_buf(termination_record).expect("failed to parse buffer"),
+        );
+
+        handle_incoming_request(message);
+    }
 }

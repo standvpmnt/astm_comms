@@ -1,5 +1,58 @@
 use bytes::Bytes;
 
+#[derive(Debug, PartialEq)]
+pub enum Record {
+    // indicators are case insensitive
+    Header(Bytes),                  //H
+    Patient(Bytes),                 //P
+    TestOrder(Bytes),               //O
+    ResultR(Bytes),                  //R
+    Comment(Bytes),                 //C
+    RequestInformation(Bytes),      //Q
+    Scientific(Bytes),              //S
+    MessageTerminator(Bytes),       // L
+    ManufacturerInformation(Bytes), //M
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum RecordError {
+    #[error("{0}")]
+    InvalidInput(String),
+    #[error("{0}")]
+    MalformedRecord(String),
+}
+
+impl Record {
+    pub fn parse_from_buf(buf_slice: &[u8]) -> Result<Record, RecordError> {
+        if buf_slice.len() < 3 {
+            return Err(RecordError::MalformedRecord(format!(
+                "provided buffer is not an ASTM record, {:?}",
+                buf_slice
+            )));
+        }
+        // println!("parsing buf slice: {:?}", buf_slice);
+        match buf_slice[2] {
+            b'h' | b'H' => Ok(Record::Header(Bytes::copy_from_slice(buf_slice))),
+            b'p' | b'P' => Ok(Record::Patient(Bytes::copy_from_slice(buf_slice))),
+            b'o' | b'O' => Ok(Record::TestOrder(Bytes::copy_from_slice(buf_slice))),
+            b'r' | b'R' => Ok(Record::ResultR(Bytes::copy_from_slice(buf_slice))),
+            b'c' | b'C' => Ok(Record::Comment(Bytes::copy_from_slice(buf_slice))),
+            b'q' | b'Q' => Ok(Record::RequestInformation(Bytes::copy_from_slice(
+                buf_slice,
+            ))),
+            b's' | b'S' => Ok(Record::Scientific(Bytes::copy_from_slice(buf_slice))),
+            b'l' | b'L' => Ok(Record::MessageTerminator(Bytes::copy_from_slice(buf_slice))),
+            b'm' | b'M' => Ok(Record::ManufacturerInformation(Bytes::copy_from_slice(
+                buf_slice,
+            ))),
+            _ => Err(RecordError::MalformedRecord(format!(
+                "record has some other item,{}",
+                buf_slice[2]
+            ))),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Header {
     raw_data: Bytes,
@@ -10,80 +63,89 @@ pub struct Header {
 }
 
 impl Header {
-
-    pub fn new(bytes: Bytes) -> Header {
-        if bytes.len() < 6 {
-            panic!("unhandled case of short buffer for header {:?}", bytes);
-        }
-        Header {
-            field_delim: bytes.get(3).map(|x| x.clone()).unwrap_or(b'|'),
-            repeat_delim:  bytes.get(4).map(|x| x.clone()).unwrap_or(b'\\'),
-            component_delim: bytes.get(5).map(|x| x.clone()).unwrap_or(b'^'),
-            escape_delim: bytes.get(6).map(|x| x.clone()).unwrap_or(b'&'),
-            raw_data: bytes
+    // TODO! modify this to use Record instead
+    pub fn new(record: Record) -> Header {
+        if let Record::Header(bytes) = record {
+            if bytes.len() < 6 {
+                panic!("unhandled case of short buffer for header {:?}", bytes);
+            }
+            if bytes[2] == b'H' || bytes[2] == b'h' {
+                return Header {
+                    field_delim: bytes.get(3).map(|x| x.clone()).unwrap_or(b'|'),
+                    repeat_delim: bytes.get(4).map(|x| x.clone()).unwrap_or(b'\\'),
+                    component_delim: bytes.get(5).map(|x| x.clone()).unwrap_or(b'^'),
+                    escape_delim: bytes.get(6).map(|x| x.clone()).unwrap_or(b'&'),
+                    raw_data: bytes,
+                }
+            } else {
+                println!("{:?}", *bytes.get(2).unwrap());
+                println!("{:?}, {:?}", b'h', b'H');
+                panic!("attempting to parse invalid record,\n {:?}", bytes);
+            }
+        } else {
+            panic!("attempted to create Header from invalid record");
         }
     }
 
     pub fn message_control_id(&self) -> Option<&[u8]> {
-        println!();
-        println!();
-        println!();
-        println!("current state of struct is {:#?}", self);
+        self.raw_data.split(|x| x == &self.field_delim).nth(2)
+    }
+
+    pub fn access_password(&self) -> Option<&[u8]> {
         self.raw_data.split(|x| x == &self.field_delim).nth(3)
-        // todo!() // third field
     }
 
-    fn access_password(&self) -> Option<&str> {
-        todo!() // fourth field
+    pub fn sender_id(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(4)
     }
 
-    fn sender_id(&self) -> Option<&str> {
-        todo!() // fifth field
+    pub fn sender_street_address(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(5)
     }
 
-    fn sender_street_address(&self) -> Option<&str> {
-        todo!() //sixth field
-    }
-
-    fn reserved_field(&self) -> Option<bool> {
+    pub fn reserved_field(&self) -> Option<bool> {
         None //seventh field
     }
 
-    fn sender_telephone(&self) -> Option<&str> {
-        todo!() //eighth field
+    pub fn sender_telephone(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(7)
     }
 
-    fn sender_characteristics(&self) -> Option<&str> {
-        todo!() //ninth field
+    pub fn sender_characteristics(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(8).filter(|x| x != &[])
     }
 
-    fn receiver_id(&self) -> Option<&str> {
-        todo!() //tenth field
+    pub fn receiver_id(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(9)
     }
 
-    // comment or special instructions eleventh field
+    pub fn special_instructions(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(10)
+    }
 
-    // processing id, twelvth field
+    pub fn processing_id(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(11)
     // P -> production
     // T -> training
     // D -> debugging
     // Q -> Quality control
+    }
 
-    // version_number thirteenth field
+    pub fn version_number(&self) -> Option<&[u8]> {
+        // this processing is being done because the item may be `[]`
+        // which should not be interpreted as ""
+        self.raw_data.split(|x| x == &self.field_delim).nth(12).filter(|x| x != &[])
+    }
 
-    // date_time of message generation fourteenth field
-
-    //
-
-
+    pub fn sent_at(&self) -> Option<&[u8]> {
+        self.raw_data.split(|x| x == &self.field_delim).nth(13)
+    }
 
 }
-
 
 struct Patient {}
 
 impl Patient {
-
     // sequence_number second field 5.6.7
 
     // doctors_id third field
@@ -94,7 +156,6 @@ impl Patient {
 
     // name sixth field, (last name, first name, middle name or initial, suffix, title
     //                            separated by component delimieter 5.6.6)
-
 
     // mothers_maiden_name (mother's maiden surname) seventh field
 
@@ -194,7 +255,6 @@ impl Patient {
     // A - Adult
     // P1 - Pediatric (one to six months)
     // P2 - Pediatric (six months to three years)
-
 }
 
 struct TestOrder {} // O
@@ -291,9 +351,9 @@ impl TestOrder {
     // patient institution
 }
 
-struct Result{} // R
+struct ResultR {} // R
 
-impl Result {
+impl ResultR {
     // sequence_number 2nd field
 
     // universal_test_id 3rd field
@@ -356,7 +416,7 @@ impl Result {
     // which performed this test
 }
 
-struct Comment{} // C
+struct Comment {} // C
 
 impl Comment {
     // sequence_number refer to section 5.6.7 2nd field
@@ -369,9 +429,9 @@ impl Comment {
     // text comment text code etc can be sent by using the component delimiter 4th field_delimiter
 }
 
-struct RequestInformation{} // Q
+struct RequestInformation {} // Q
 
-impl RequestInformation{
+impl RequestInformation {
     // sequence_number refer to section 5.6.7 2nd field
 
     // starting_range_id 3rd field, can contain 3 or more components,
@@ -420,7 +480,7 @@ impl RequestInformation{
     // D - requesting demographics only (eg. patient record)
 }
 
-struct MessageTerminator{} // L
+struct MessageTerminator {} // L
 
 impl MessageTerminator {
     // sequence_number 2nd field
@@ -437,9 +497,9 @@ impl MessageTerminator {
     // F - last request for information processed
 }
 
-struct Scientific{} // S
+struct Scientific {} // S
 
-impl  Scientific {
+impl Scientific {
     // sequence_number 2nd field
 
     // analytical method 3rd field, text field conforms to Appendix I of Elevitch and Boroviczeny
@@ -484,10 +544,122 @@ impl  Scientific {
     // patient_race 21st field
 }
 
-struct ManufacturerInformation{} // M
+struct ManufacturerInformation {} // M
 
-impl ManufacturerInformation{
+impl ManufacturerInformation {
     // sequence_number 2nd field
 
     // manufacturer specific, details keep changing for vendors
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Record;
+    use claims::*;
+
+    #[test]
+    fn can_parse_records() {
+        // b"1H|\\^&|||c111^Roche^c111^4.2.2.1730^1^13085|||||host|PCUPL^BATCH|P|1|20230515160340\r";
+        let head_record: &[u8] = &[
+            2, 49, 72, 124, 92, 94, 38, 124, 124, 124, 99, 49, 49, 49, 94, 82, 111, 99, 104, 101,
+            94, 99, 49, 49, 49, 94, 52, 46, 50, 46, 50, 46, 49, 55, 51, 48, 94, 49, 94, 49, 51, 48,
+            56, 53, 124, 124, 124, 124, 124, 104, 111, 115, 116, 124, 82, 83, 85, 80, 76, 94, 66,
+            65, 84, 67, 72, 124, 80, 124, 49, 124, 50, 48, 50, 51, 48, 53, 50, 53, 49, 54, 52, 57,
+            51, 51, 13, 23, 70, 68, 13, 10,
+        ];
+        let patient_record: &[u8] = &[2, 50, 80, 124, 49, 124, 124, 13, 23, 52, 66, 13, 10];
+        let order_record: &[u8] = &[
+            2, 51, 79, 124, 49, 124, 80, 67, 67, 67, 49, 94, 53, 50, 53, 48, 50, 55, 48, 48, 94,
+            50, 48, 50, 51, 49, 50, 51, 49, 124, 49, 51, 57, 49, 124, 94, 94, 94, 55, 49, 50, 124,
+            124, 124, 124, 124, 124, 124, 81, 124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+            124, 50, 48, 50, 51, 48, 53, 50, 53, 49, 54, 52, 57, 51, 51, 124, 124, 124, 70, 13, 23,
+            48, 50, 13, 10,
+        ];
+        let result_record: &[u8] = &[
+            2, 52, 82, 124, 49, 124, 94, 94, 94, 55, 49, 50, 124, 48, 46, 57, 124, 109, 103, 47,
+            100, 76, 124, 49, 46, 48, 92, 48, 46, 57, 92, 49, 46, 48, 124, 78, 124, 124, 82, 124,
+            124, 36, 83, 89, 83, 36, 124, 124, 50, 48, 50, 51, 48, 52, 50, 56, 49, 56, 52, 49, 49, 54, 13, 23, 67, 55, 13, 10, ];
+        let comment_record: &[u8] = &[
+            2, 53, 67, 124, 49, 124, 73, 124, 124, 73, 13, 23, 52, 70, 13, 10,
+        ];
+        let termination_record: &[u8] = &[2, 54, 76, 124, 49, 124, 78, 13, 3, 48, 57, 13, 10];
+
+        let output = Record::parse_from_buf(head_record).expect("failed to parse string");
+        match output {
+            Record::Header(k) => assert!(k.len() > 1),
+            _ => {
+                println!("Failed to parse header record \n {:?}", head_record);
+                assert_err!(Ok(5));
+            }
+        }
+
+        let output = Record::parse_from_buf(patient_record).expect("failed to parse string");
+        match output {
+            Record::Patient(k) => assert!(k.len() > 1),
+            _ => {
+                println!("Failed to parse patient record \n {:?}", patient_record);
+                assert_err!(Ok(5));
+            }
+        }
+
+        let output = Record::parse_from_buf(order_record).expect("failed to parse string");
+        match output {
+            Record::TestOrder(k) => assert!(k.len() > 1),
+            _ => {
+                println!("Failed to parse order record \n {:?}", order_record);
+                assert_err!(Ok(5));
+            }
+        }
+
+        let output = Record::parse_from_buf(result_record).expect("failed to parse string");
+        match output {
+            Record::ResultR(k) => {
+                assert!(k.len() > 1);
+            },
+            _ => {
+                println!("Failed to parse result record \n {:?}", result_record);
+                assert_err!(Ok(5));
+            }
+        }
+
+        let output = Record::parse_from_buf(comment_record).expect("failed to parse string");
+        match output {
+            Record::Comment(k) => assert!(k.len() > 1),
+            _ => {
+                println!("Failed to parse comment record \n {:?}", comment_record);
+                assert_err!(Ok(5));
+            }
+        }
+
+        let output = Record::parse_from_buf(termination_record).expect("failed to parse string");
+        match output {
+            Record::MessageTerminator(k) => assert!(k.len() > 1),
+            _ => {
+                println!("Failed to parse result record \n {:?}", termination_record);
+                assert_err!(Ok(5));
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_inputs_are_adequately_handles() {
+        let input = b"14";
+        let input1 = b"";
+        let input2 = b"ajdf";
+
+        assert_err!(Record::parse_from_buf(input));
+        assert_err!(Record::parse_from_buf(input1));
+        assert_err!(Record::parse_from_buf(input2));
+    }
+
+    // #[test]
+    // fn can_get_frame_number_of_a_record() {
+    //     let input = "1H|\\^&|||c111^Roche^c111^4.2.2.1730^1^13085|||||host|PCUPL^BATCH|P|1|20230515160340\r";
+    //     let input1 = "2M|1|CR^BM^c111^1|712^BILT3|57884601|umol/L|BS^BILT3|712^SR^12547\\712^R1^1209|N^R|2|20230428183346|A^$SYS$||1.349997E-03^2.383310E-04|SD^^^59514300|70.7^0.0182^0.0186^0.0178^0^0\\0^0.00135^0.0016^0.0011^0^0\r";
+    //     let input2 = "3L|1|N\r";
+
+    //     assert_eq!(Record::parse(input.to_owned()).unwrap().frame_number(), 1);
+    //     assert_eq!(Record::parse(input1.to_owned()).unwrap().frame_number(), 2);
+    //     assert_eq!(Record::parse(input2.to_owned()).unwrap().frame_number(), 3);
+    // }
 }
