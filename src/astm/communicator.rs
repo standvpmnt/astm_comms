@@ -79,7 +79,7 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
         let mut buf = [0u8; 600];
 
         tokio::time::sleep(Duration::from_millis(100)).await;
-        let mut message: Vec<Record> = vec!();
+        let mut message: Vec<Record> = vec![];
         loop {
             let ready_bytes = handle
                 .bytes_to_read()
@@ -124,12 +124,12 @@ pub async fn process_incoming(mut handle: Box<dyn SerialPort>) {
                         if k > 1 {
                             // parse input into a record
                             // validate the record
-                                // if validation fails send NAK and let loop re-run, raise alerts
-                                // as well
+                            // if validation fails send NAK and let loop re-run, raise alerts
+                            // as well
                             // if validation passes, push the record into a vector
                             message.push(split_to_records(&buf[..k]));
                         }
-                        if &buf[k-5] == &ETX[0] {
+                        if &buf[k - 5] == &ETX[0] {
                             handle_incoming_request(message);
                             // handle message
                             //
@@ -174,7 +174,10 @@ fn handle_incoming_request(message: Vec<Record>) {
     println!("{:?}", header.sent_at());
     println!("{:#?}", header.special_instructions());
     println!("{:#?}", header.receiver_id());
-    println!("{:#?}", std::str::from_utf8(header.sender_characteristics().unwrap()));
+    println!(
+        "{:#?}",
+        std::str::from_utf8(header.sender_characteristics().unwrap())
+    );
     println!("{:#?}", header.version_number());
     println!("{:#?}", header.processing_id());
     // for record in message.into_iter() {
@@ -184,7 +187,6 @@ fn handle_incoming_request(message: Vec<Record>) {
     // });
     // h.await.unwrap();
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -211,20 +213,22 @@ mod tests {
         let result_record: &[u8] = &[
             2, 52, 82, 124, 49, 124, 94, 94, 94, 55, 49, 50, 124, 48, 46, 57, 124, 109, 103, 47,
             100, 76, 124, 49, 46, 48, 92, 48, 46, 57, 92, 49, 46, 48, 124, 78, 124, 124, 82, 124,
-            124, 36, 83, 89, 83, 36, 124, 124, 50, 48, 50, 51, 48, 52, 50, 56, 49, 56, 52, 49, 49, 54, 13, 23, 67, 55, 13, 10, ];
+            124, 36, 83, 89, 83, 36, 124, 124, 50, 48, 50, 51, 48, 52, 50, 56, 49, 56, 52, 49, 49,
+            54, 13, 23, 67, 55, 13, 10,
+        ];
         let comment_record: &[u8] = &[
             2, 53, 67, 124, 49, 124, 73, 124, 124, 73, 13, 23, 52, 70, 13, 10,
         ];
         let termination_record: &[u8] = &[2, 54, 76, 124, 49, 124, 78, 13, 3, 48, 57, 13, 10];
 
-        let message = vec!(
+        let message = vec![
             Record::parse_from_buf(head_record).expect("failed to parse buffer"),
             Record::parse_from_buf(patient_record).expect("failed to parse buffer"),
             Record::parse_from_buf(order_record).expect("failed to parse buffer"),
             Record::parse_from_buf(result_record).expect("failed to parse buffer"),
             Record::parse_from_buf(comment_record).expect("failed to parse buffer"),
             Record::parse_from_buf(termination_record).expect("failed to parse buffer"),
-        );
+        ];
 
         handle_incoming_request(message);
     }

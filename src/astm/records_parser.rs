@@ -6,7 +6,7 @@ pub enum Record {
     Header(Bytes),                  //H
     Patient(Bytes),                 //P
     TestOrder(Bytes),               //O
-    ResultR(Bytes),                  //R
+    ResultR(Bytes),                 //R
     Comment(Bytes),                 //C
     RequestInformation(Bytes),      //Q
     Scientific(Bytes),              //S
@@ -51,109 +51,202 @@ impl Record {
             ))),
         }
     }
+
+    pub fn inner(self) -> Bytes {
+        match self {
+            Record::Header(x) => x,
+            Record::Patient(x) => x,                 //P
+            Record::TestOrder(x) => x,               //O
+            Record::ResultR(x) => x,                 //R
+            Record::Comment(x) => x,                 //C
+            Record::RequestInformation(x) => x,      //Q
+            Record::Scientific(x) => x,              //S
+            Record::MessageTerminator(x) => x,       // L
+            Record::ManufacturerInformation(x) => x, //M
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BaseRecord<'a> {
+    raw_data: Bytes,
+    delimiter: Delimiters<'a>,
+}
+
+impl<'a> BaseRecord<'a> {
+    pub fn new(bytes: Bytes, delimiter: Delimiters<'a>) -> BaseRecord<'a> {
+        // let inner = record.inner();
+        BaseRecord {
+            raw_data: bytes,
+            delimiter,
+        }
+    }
+
+    fn at_field_pos(&self, position: usize) -> Option<&[u8]> {
+        self.raw_data
+            .split(|x| x == self.delimiter.field)
+            .nth(position)
+            .filter(|x| x != &[])
+    }
+}
+
+// This is un-necessary optimization, remove this once the final implementation
+// is ready
+#[derive(Debug)]
+pub struct Delimiters<'a> {
+    field: &'a u8,
+    repeat: &'a u8,
+    component: &'a u8,
+    escape: &'a u8,
 }
 
 #[derive(Debug)]
 pub struct Header {
     raw_data: Bytes,
-    pub field_delim: u8,
-    pub repeat_delim: u8,
-    pub component_delim: u8,
-    pub escape_delim: u8,
+    field_delim: u8,
+    repeat_delim: u8,
+    component_delim: u8,
+    escape_delim: u8,
 }
 
 impl Header {
     // TODO! modify this to use Record instead
     pub fn new(record: Record) -> Header {
-        if let Record::Header(bytes) = record {
-            if bytes.len() < 6 {
-                panic!("unhandled case of short buffer for header {:?}", bytes);
-            }
-            if bytes[2] == b'H' || bytes[2] == b'h' {
-                return Header {
-                    field_delim: bytes.get(3).map(|x| x.clone()).unwrap_or(b'|'),
-                    repeat_delim: bytes.get(4).map(|x| x.clone()).unwrap_or(b'\\'),
-                    component_delim: bytes.get(5).map(|x| x.clone()).unwrap_or(b'^'),
-                    escape_delim: bytes.get(6).map(|x| x.clone()).unwrap_or(b'&'),
-                    raw_data: bytes,
+        match record {
+            Record::Header(bytes) => {
+                if bytes.len() < 6 {
+                    panic!("unhandled case of short buffer for header {:?}", bytes);
                 }
-            } else {
-                println!("{:?}", *bytes.get(2).unwrap());
-                println!("{:?}, {:?}", b'h', b'H');
-                panic!("attempting to parse invalid record,\n {:?}", bytes);
+                return Header {
+                    // delimiter: Delimiters {
+                    field_delim: bytes.get(3).map(|x| *x).unwrap_or(b'|'),
+                    repeat_delim: bytes.get(4).map(|x| *x).unwrap_or(b'\\'),
+                    component_delim: bytes.get(5).map(|x| *x).unwrap_or(b'^'),
+                    escape_delim: bytes.get(6).map(|x| *x).unwrap_or(b'&'),
+                    // },
+                    raw_data: bytes,
+                };
             }
-        } else {
-            panic!("attempted to create Header from invalid record");
+            k => {
+                panic!(
+                    "attempted to create header record from unknown record {:#?}",
+                    k
+                )
+            }
         }
     }
 
+    // since we are dealing with u8 only, clone is as expensive as taking a pointer
+    pub fn delimiters(&self) -> Delimiters {
+        Delimiters {
+            field: &self.field_delim,
+            repeat: &self.repeat_delim,
+            component: &self.component_delim,
+            escape: &self.escape_delim,
+        }
+    }
+
+    fn at_field_position(&self, pos: usize) -> Option<&[u8]> {
+        self.raw_data
+            .split(|x| x == &self.field_delim)
+            .nth(pos)
+            .filter(|x| x != &[])
+    }
+
     pub fn message_control_id(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(2)
+        self.at_field_position(2)
     }
 
     pub fn access_password(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(3)
+        self.at_field_position(3)
     }
 
     pub fn sender_id(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(4)
+        self.at_field_position(4)
     }
 
     pub fn sender_street_address(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(5)
+        self.at_field_position(5)
     }
 
-    pub fn reserved_field(&self) -> Option<bool> {
-        None //seventh field
+    pub fn reserved_field(&self) -> Option<&[u8]> {
+        self.at_field_position(6)
     }
 
     pub fn sender_telephone(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(7)
+        self.at_field_position(7)
     }
 
     pub fn sender_characteristics(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(8).filter(|x| x != &[])
+        self.at_field_position(8)
     }
 
     pub fn receiver_id(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(9)
+        self.at_field_position(9)
     }
 
     pub fn special_instructions(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(10)
+        self.at_field_position(10)
     }
 
     pub fn processing_id(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(11)
-    // P -> production
-    // T -> training
-    // D -> debugging
-    // Q -> Quality control
+        self.at_field_position(11)
+        // P -> production
+        // T -> training
+        // D -> debugging
+        // Q -> Quality control
     }
 
     pub fn version_number(&self) -> Option<&[u8]> {
-        // this processing is being done because the item may be `[]`
-        // which should not be interpreted as ""
-        self.raw_data.split(|x| x == &self.field_delim).nth(12).filter(|x| x != &[])
+        self.at_field_position(12)
     }
 
     pub fn sent_at(&self) -> Option<&[u8]> {
-        self.raw_data.split(|x| x == &self.field_delim).nth(13)
+        self.at_field_position(13)
     }
-
 }
 
-struct Patient {}
+#[derive(Debug)]
+struct Patient<'a>(BaseRecord<'a>);
 
-impl Patient {
+impl<'a> Patient<'a> {
+    pub fn new(record: Record, delimiter: Delimiters<'a>) -> Patient<'a> {
+        match record {
+            Record::Patient(bytes) => {
+                if bytes.len() < 6 {
+                    panic!("unhandled case of short buffer for header {:?}", bytes);
+                }
+                Patient(BaseRecord::new(bytes, delimiter))
+            }
+            k => {
+                panic!(
+                    "attempted to create header record from unknown record {:#?}",
+                    k
+                )
+            }
+        }
+    }
+
     // sequence_number second field 5.6.7
+    pub fn sequence_number(&self) -> Option<&[u8]> {
+        self.0.at_field_pos(1)
+    }
 
-    // doctors_id third field
+    pub fn doctors_id(&self) -> Option<&[u8]> {
+        self.0.at_field_pos(2)
+    }
 
-    // lab_id fourth field
+    pub fn lab_id(&self) -> Option<&[u8]> {
+        self.0.at_field_pos(3)
+    }
 
-    // other_id_number_optional fifth field
+    pub fn other_id(&self) -> Option<&[u8]> {
+        self.0.at_field_pos(4)
+    }
 
+    pub fn name(&self) -> Option<&[u8]> {
+        self.0.at_field_pos(5)
+    }
     // name sixth field, (last name, first name, middle name or initial, suffix, title
     //                            separated by component delimieter 5.6.6)
 
@@ -257,9 +350,39 @@ impl Patient {
     // P2 - Pediatric (six months to three years)
 }
 
-struct TestOrder {} // O
+#[derive(Debug)]
+struct TestOrder<'a> {
+    raw_data: Bytes,
+    delimiter: Delimiters<'a>,
+} // O
 
-impl TestOrder {
+impl<'a> TestOrder<'a> {
+    pub fn new(record: Record, delimiter: Delimiters<'a>) -> TestOrder<'a> {
+        match record {
+            Record::TestOrder(bytes) => {
+                if bytes.len() < 6 {
+                    panic!("unhandled case of short buffer for header {:?}", bytes);
+                }
+                return TestOrder {
+                    raw_data: bytes,
+                    delimiter,
+                };
+            }
+            k => {
+                panic!(
+                    "attempted to create header record from unknown record {:#?}",
+                    k
+                )
+            }
+        }
+    }
+
+    fn at_field_position(&self, position: usize) -> Option<&[u8]> {
+        self.raw_data
+            .split(|x| x == self.delimiter.field)
+            .nth(position)
+            .filter(|x| *x != [])
+    }
     // sequence_number second field
 
     // specimen_id, if multiple components of specimen separate them with
@@ -578,7 +701,9 @@ mod tests {
         let result_record: &[u8] = &[
             2, 52, 82, 124, 49, 124, 94, 94, 94, 55, 49, 50, 124, 48, 46, 57, 124, 109, 103, 47,
             100, 76, 124, 49, 46, 48, 92, 48, 46, 57, 92, 49, 46, 48, 124, 78, 124, 124, 82, 124,
-            124, 36, 83, 89, 83, 36, 124, 124, 50, 48, 50, 51, 48, 52, 50, 56, 49, 56, 52, 49, 49, 54, 13, 23, 67, 55, 13, 10, ];
+            124, 36, 83, 89, 83, 36, 124, 124, 50, 48, 50, 51, 48, 52, 50, 56, 49, 56, 52, 49, 49,
+            54, 13, 23, 67, 55, 13, 10,
+        ];
         let comment_record: &[u8] = &[
             2, 53, 67, 124, 49, 124, 73, 124, 124, 73, 13, 23, 52, 70, 13, 10,
         ];
@@ -615,7 +740,7 @@ mod tests {
         match output {
             Record::ResultR(k) => {
                 assert!(k.len() > 1);
-            },
+            }
             _ => {
                 println!("Failed to parse result record \n {:?}", result_record);
                 assert_err!(Ok(5));
