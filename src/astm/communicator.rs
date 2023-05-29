@@ -170,16 +170,19 @@ pub fn split_to_records(buf: &[u8]) -> Record {
 fn handle_incoming_request(message: Vec<Record>) {
     // let h = tokio::spawn(async move{
     let mut messages = message.into_iter();
-    let header = Header::new(messages.next().unwrap());
-    println!("{:?}", header.sent_at());
-    println!("{:#?}", header.special_instructions());
-    println!("{:#?}", header.receiver_id());
-    println!(
-        "{:#?}",
-        std::str::from_utf8(header.sender_characteristics().unwrap())
-    );
-    println!("{:#?}", header.version_number());
-    println!("{:#?}", header.processing_id());
+    for record in messages {
+        println!("{:?}", record.inner());
+    }
+    // let header = Header::new(messages.next().unwrap());
+    // println!("{:?}", header.sent_at());
+    // println!("{:#?}", header.special_instructions());
+    // println!("{:#?}", header.receiver_id());
+    // println!(
+    //     "{:#?}",
+    //     std::str::from_utf8(header.sender_characteristics().unwrap())
+    // );
+    // println!("{:#?}", header.version_number());
+    // println!("{:#?}", header.processing_id());
     // for record in message.into_iter() {
     //     let header = Header::new(record);
     //     dbg!(header);
