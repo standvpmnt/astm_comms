@@ -191,6 +191,25 @@ fn handle_incoming_request(message: Vec<Record>) {
     // h.await.unwrap();
 }
 
+fn checksum(input: &[u8]) -> (u8, u8) {
+    let len = input.len();
+    // using indexing here instead of filtering, since filtering leaves out
+    // inner data values
+    let checksum: u32 = input[1..=len-5].iter()
+        .map(|&x| x as u32)
+        .sum();
+    let checksum = format!("{:x}", (checksum % 256) as u8);
+    // let checksum = checksum.as_str();
+    println!("{}", checksum);
+    if checksum.len() != 2 {
+        panic!("Issue with checksum logic implementation");
+    }
+    // TODO! use a buffer instead
+    let alpha = (checksum.chars().nth(0).unwrap().to_ascii_uppercase().to_string().as_bytes()[0],
+                 checksum.chars().nth(1).unwrap().to_ascii_uppercase().to_string().as_bytes()[0]);
+    alpha
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +253,23 @@ mod tests {
         ];
 
         handle_incoming_request(message);
+    }
+
+    #[test]
+    fn checksum_calculates_correct_value() {
+        let input = [02, b'\x31', b'\x54', b'\x65', b'\x73', b'\x74', 03, 52, 70, 13, 10];
+        assert_eq!(checksum(&input), (b'D', b'4'))
+    }
+
+    #[test]
+    fn checksum_calculates_correct_value_for_record_types() {
+        let input: &[u8] = &[
+            2, 49, 72, 124, 92, 94, 38, 124, 124, 124, 99, 49, 49, 49, 94, 82, 111, 99, 104, 101,
+            94, 99, 49, 49, 49, 94, 52, 46, 50, 46, 50, 46, 49, 55, 51, 48, 94, 49, 94, 49, 51, 48,
+            56, 53, 124, 124, 124, 124, 124, 104, 111, 115, 116, 124, 82, 83, 85, 80, 76, 94, 66,
+            65, 84, 67, 72, 124, 80, 124, 49, 124, 50, 48, 50, 51, 48, 53, 50, 53, 49, 54, 52, 57,
+            51, 51, 13, 23, 70, 68, 13, 10,
+        ];
+        assert_eq!(checksum(&input), (b'F', b'D'))
     }
 }
